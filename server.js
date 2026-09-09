@@ -1,37 +1,77 @@
-const http=require('http'),fs=require('fs'),path=require('path'),OpenAI=require('openai');const {toFile}=require('openai/uploads');const port=process.env.PORT||3000,MAX=24*1024*1024;
-const BASE='https://images.unsplash.com/photo-1665110654191-e68f223f449d?auto=format&fit=crop&fm=jpg&q=82&w=1800';
-function send(res,s,o){res.writeHead(s,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(o))}
-function body(req){return new Promise((ok,no)=>{let n=0,a=[];req.on('data',c=>{n+=c.length;if(n>MAX){no(Error('Request too large'));req.destroy()}else a.push(c)});req.on('end',()=>{try{ok(JSON.parse(Buffer.concat(a).toString()||'{}'))}catch(e){no(e)}});req.on('error',no)})}
+const http=require('http'),fs=require('fs'),path=require('path'),OpenAI=require('openai');
+const {toFile}=require('openai/uploads');
+const port=process.env.PORT||3000,MAX=24*1024*1024;
+const HERO_B64=fs.readFileSync(path.join(__dirname,'hero.b64'),'utf8').replace(/\s+/g,'');
+const HERO_BUF=Buffer.from(HERO_B64,'base64');
+function send(res,s,o){res.writeHead(s,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(o))}
+function body(req){return new Promise((ok,no)=>{let n=0,a=[];req.on('data',c=>{n+=c.length;if(n>MAX){no(Error('Request too large'));req.destroy();return}a.push(c)});req.on('end',()=>{try{ok(JSON.parse(Buffer.concat(a).toString()||'{}'))}catch(e){no(e)}});req.on('error',no)})}
 async function fileFromUrl(url,name){if(!url)return null;const r=await fetch(url);if(!r.ok)throw Error('Could not load '+name);const type=(r.headers.get('content-type')||'image/jpeg').split(';')[0];return toFile(Buffer.from(await r.arrayBuffer()),name,{type})}
-async function render(b){if(!process.env.OPENAI_API_KEY)throw Error('AI renderer is not configured');const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});const imgs=[await fileFromUrl(BASE,'pool-composition.jpg')];if(b.tileImage)imgs.push(await fileFromUrl(b.tileImage,'selected-waterline-tile.jpg'));if(b.deckImage)imgs.push(await fileFromUrl(b.deckImage,'selected-deck.jpg'));
-const prompt=`Create a photorealistic private Las Vegas/Henderson backyard pool visualization that strongly follows image 1 for composition, camera height and pool-forward framing. The pool must dominate the foreground and middle of the frame. Camera is at the rear patio looking outward. A small edge of stucco house/patio may appear only on the far right. Across the yard use a normal 6-foot tan/gray CMU block privacy wall with modest desert landscaping. No people, hotel/resort look, apartment complex, glass fencing, lane lines, signage, floating materials, vertical deck texture, or tile outside the actual waterline.
-MATERIALS: pool interior/plaster=${b.finish||'selected finish'}. waterline tile=${b.tile||'selected tile'}. deck/pavers=${b.deck||'selected deck'}. yard=${b.yard||'simple Las Vegas residential desert yard'}.
-Image 2, if present, is the EXACT selected waterline tile; apply only to the narrow waterline band around the inside perimeter at realistic scale. Image 3, if present, is the EXACT selected deck/paver; apply only to horizontal pool-deck hardscape at realistic scale. Plaster changes only the pool interior/water tone while preserving realistic depth, reflections, ripples and caustics. Keep material boundaries clean and construction-realistic.`;
-const out=await client.images.edit({model:'gpt-image-2',image:imgs,prompt,size:'1536x1024',quality:'high',input_fidelity:'high'});const x=out.data&&out.data[0];if(!x)throw Error('Renderer returned no image');return x.b64_json?'data:image/png;base64,'+x.b64_json:x.url}
-function loadUI(){let h=fs.readdirSync(path.join(__dirname,'ui-live')).filter(x=>x.endsWith('.txt')).sort().map(x=>fs.readFileSync(path.join(__dirname,'ui-live',x),'utf8')).join('');h=h.replace(/https:\/\/images\.unsplash\.com\/photo-[^\"']+/,BASE);h=h.replace('</body>',`<style>
-.waterTint,.tileOverlay,.deckOverlay{display:none!important}.hero{touch-action:none;user-select:none}.sceneStage{position:absolute;inset:0;transform-origin:center center;will-change:transform}.sceneStage>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center center}.surfaceSvg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.surface{opacity:0;transition:opacity .18s}.surface.active{opacity:1}.finishFill,.deckFill,.yardFill{fill:rgba(39,207,214,.28);stroke:#fff;stroke-width:.8;vector-effect:non-scaling-stroke}.tileLine{fill:none;stroke:#27cfd6;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 2px rgba(0,0,0,.7));vector-effect:non-scaling-stroke}.surfaceTag{position:absolute;z-index:8;left:50%;bottom:14px;transform:translateX(-50%);background:rgba(10,27,29,.88);color:#fff;padding:8px 12px;border-radius:999px;font:800 11px Arial;white-space:nowrap;pointer-events:none}.zoomControls{position:absolute;z-index:10;right:12px;bottom:12px;display:flex;gap:7px}.zoomControls button{width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.94);color:#102628;font:800 20px Arial;box-shadow:0 2px 10px rgba(0,0,0,.22)}.zoomHint{position:absolute;z-index:9;right:12px;top:12px;background:rgba(0,0,0,.56);color:#fff;padding:6px 9px;border-radius:8px;font:700 10px Arial;pointer-events:none}.renderBtn{display:block;width:100%;border:0;border-radius:10px;padding:14px;background:#102628;color:#fff;font-weight:800;margin:14px 0;cursor:pointer}.renderMsg{font-size:12px;color:#687171;margin:8px 0 18px}.hero.rendering:after{content:'Creating realistic pool preview…';position:absolute;inset:0;background:rgba(0,0,0,.52);color:#fff;display:grid;place-items:center;font:800 16px Arial;z-index:15}.heroCopy{z-index:11}.heroCopy p{max-width:290px}
-</style><script>(function(){
-const hero=document.querySelector('.hero'),pic=hero.querySelector('img');
-const stage=document.createElement('div');stage.className='sceneStage';pic.parentNode.insertBefore(stage,pic);stage.appendChild(pic);
-const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 100 100');svg.setAttribute('preserveAspectRatio','none');svg.classList.add('surfaceSvg');svg.innerHTML='<polygon class="surface finishFill" data-surface="finish" points="8,52 21,43 49,38 82,41 97,55 91,87 17,91 4,72"/><polyline class="surface tileLine" data-surface="tile" points="8,52 21,43 49,38 82,41 97,55"/><polygon class="surface deckFill" data-surface="deck" points="0,59 9,52 18,49 8,93 0,100 100,100 100,64 96,55 91,87 17,91"/><polygon class="surface yardFill" data-surface="yard" points="0,19 100,19 100,55 84,43 49,39 20,44 8,52 0,58"/>';stage.appendChild(svg);
-const tag=document.createElement('div');tag.className='surfaceTag';hero.appendChild(tag);
-const hint=document.createElement('div');hint.className='zoomHint';hint.textContent='Pinch or drag photo';hero.appendChild(hint);
-const controls=document.createElement('div');controls.className='zoomControls';controls.innerHTML='<button type="button" aria-label="Zoom out">−</button><button type="button" aria-label="Reset view">↺</button><button type="button" aria-label="Zoom in">+</button>';hero.appendChild(controls);
-let scale=1,x=0,y=0,pointers=new Map(),startDist=0,startScale=1,startMid=null,startX=0,startY=0,startPan=null;
-function applyView(){stage.style.transform='translate('+x+'px,'+y+'px) scale('+scale+')'}
-function clamp(){scale=Math.max(1,Math.min(3,scale));const mx=(hero.clientWidth*(scale-1))/2,my=(hero.clientHeight*(scale-1))/2;x=Math.max(-mx,Math.min(mx,x));y=Math.max(-my,Math.min(my,y));applyView()}
-function setScale(v){scale=v;clamp()}
-const [minus,reset,plus]=controls.querySelectorAll('button');minus.onclick=e=>{e.stopPropagation();setScale(scale-.25)};plus.onclick=e=>{e.stopPropagation();setScale(scale+.25)};reset.onclick=e=>{e.stopPropagation();scale=1;x=0;y=0;applyView()};
-hero.addEventListener('wheel',e=>{e.preventDefault();setScale(scale+(e.deltaY<0?.15:-.15))},{passive:false});
-hero.addEventListener('pointerdown',e=>{if(e.target.closest('.zoomControls'))return;hero.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1){startX=e.clientX;startY=e.clientY;startPan={x,y}}if(pointers.size===2){const a=[...pointers.values()];startDist=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);startScale=scale;startMid={x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2}}});
-hero.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1&&scale>1){x=startPan.x+(e.clientX-startX);y=startPan.y+(e.clientY-startY);clamp()}else if(pointers.size===2){const a=[...pointers.values()];const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);scale=startScale*(d/startDist);const mid={x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2};x+=mid.x-startMid.x;y+=mid.y-startMid.y;startMid=mid;clamp()}});
-function end(e){pointers.delete(e.pointerId);if(pointers.size===1){const a=[...pointers.values()][0];startX=a.x;startY=a.y;startPan={x,y}}}hero.addEventListener('pointerup',end);hero.addEventListener('pointercancel',end);
-function activePhase(){for(let i=1;i<=4;i++){const p=document.getElementById('phase'+i);if(p&&p.checked)return i}return 1}
-function highlight(){const p=activePhase();svg.querySelectorAll('.surface').forEach(n=>n.classList.remove('active'));const names={1:'finish',2:'tile',3:'deck',4:'yard'},labels={1:'Plaster / pool interior',2:'Waterline tile band',3:'Decking / hardscape',4:'Yard / landscaping'};svg.querySelectorAll('[data-surface="'+names[p]+'"]').forEach(n=>n.classList.add('active'));tag.textContent=labels[p]}
-document.querySelectorAll('input[name="phase"]').forEach(n=>n.addEventListener('change',highlight));highlight();
-const btn=document.createElement('button');btn.className='renderBtn';btn.textContent='RENDER MY SELECTIONS';const msg=document.createElement('div');msg.className='renderMsg';msg.textContent='Choose finish, tile, deck and yard, then create the realistic pool preview.';document.querySelector('.choiceArea').append(btn,msg);
-function sel(n){return document.querySelector('input[name="'+n+'"]:checked')}function lab(n){const z=sel(n);return z?document.querySelector('label[for="'+z.id+'"]'):null}function text(n){const l=lab(n);return l?l.innerText.replace(/\\n/g,' ').trim():''}function image(n){const l=lab(n),im=l&&l.querySelector('img');return im?im.src:''}
-btn.onclick=async()=>{hero.classList.add('rendering');btn.disabled=true;msg.textContent='Applying your materials to the pool, waterline, deck and yard…';try{const r=await fetch('/api/render',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({finish:text('finish'),tile:text('tile'),tileImage:image('tile'),deck:text('deck'),deckImage:image('deck'),yard:text('yard')})});const j=await r.json();if(!r.ok)throw Error(j.error||'Render failed');pic.src=j.image;scale=1;x=0;y=0;applyView();msg.textContent='Rendered. You can pinch, zoom and drag the finished preview.'}catch(e){msg.textContent='Render failed: '+e.message}finally{hero.classList.remove('rendering');btn.disabled=false}};
-})();</script></body>`);return h}
-let UI;try{UI=loadUI()}catch(e){console.error(e);UI='<!doctype html><h1>LIV Visualizer temporarily unavailable</h1>'}
-http.createServer(async(req,res)=>{const p=(req.url||'/').split('?')[0];if(p==='/api/render'&&req.method==='POST'){try{return send(res,200,{image:await render(await body(req))})}catch(e){console.error(e);return send(res,500,{error:e.message})}}if(p==='/'||p==='/index.html'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store, no-cache, must-revalidate'});return res.end(UI)}res.writeHead(404);res.end('Not found')}).listen(port,'0.0.0.0',()=>console.log('LIV material visualizer on '+port));
+async function render(b){
+ if(!process.env.OPENAI_API_KEY)throw Error('AI renderer is not configured');
+ const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});
+ const imgs=[await toFile(HERO_BUF,'liv-pool-base.jpg',{type:'image/jpeg'})];
+ if(b.tileImage)imgs.push(await fileFromUrl(b.tileImage,'selected-waterline-tile.jpg'));
+ if(b.deckImage)imgs.push(await fileFromUrl(b.deckImage,'selected-deck.jpg'));
+ const prompt=`Edit image 1 as the SAME private residential pool photograph. Preserve the exact camera position, pool shape, raised spa/water feature, coping, block wall, house edge, mountains, landscaping, lighting and perspective. DO NOT redesign the scene or generate a different backyard.
+Selected pool finish/plaster: ${b.finish||'current finish'}.
+Selected waterline tile: ${b.tile||'current tile'}.
+Selected deck/paver: ${b.deck||'current deck'}.
+Selected yard direction: ${b.yard||'current landscaping'}.
+If image 2 is present, it is the exact selected WATERLINE TILE reference. Put it ONLY on the narrow waterline tile band along the inside perimeter of the pool/spa, at realistic tile scale and perspective. Never place tile above the pool, on walls, water, deck, landscaping or sky.
+If image 3 is present, it is the exact selected DECK/PAVER reference. Put it ONLY on horizontal deck/hardscape around the pool, at realistic scale and perspective. Never put pavers on water, vertical walls, plants or sky.
+The plaster selection changes ONLY the pool interior surface and resulting water tone while retaining realistic reflections, ripples, depth and caustics. Yard changes may affect ONLY planting/landscape beds outside the hardscape and must keep the existing block wall and scene layout.
+This is a material visualization, not a redesign. Keep every boundary construction-realistic and keep all unselected areas visually unchanged.`;
+ const out=await client.images.edit({model:'gpt-image-2',image:imgs,prompt,size:'1536x1024',quality:'high',input_fidelity:'high'});
+ const x=out.data&&out.data[0];if(!x)throw Error('Renderer returned no image');return x.b64_json?'data:image/png;base64,'+x.b64_json:x.url;
+}
+function loadUI(){
+ let h=fs.readdirSync(path.join(__dirname,'ui-live')).filter(x=>x.endsWith('.txt')).sort().map(x=>fs.readFileSync(path.join(__dirname,'ui-live',x),'utf8')).join('');
+ h=h.replace(/(<section class="hero"><img src=")[^"]+("[^>]*>)/,'$1/hero.jpg$2');
+ h=h.replace('</body>',`<style>
+.waterTint,.tileOverlay,.deckOverlay{display:none!important}
+.hero{overflow:hidden!important;background:#d8d2c7!important;touch-action:none}
+.photoStage{position:absolute;inset:0;transform-origin:center center;will-change:transform}
+.photoStage>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center center;user-select:none;-webkit-user-drag:none}
+.surfaceSvg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.surfaceSvg .fill{fill:rgba(8,126,135,.17);stroke:#d9ffff;stroke-width:2;vector-effect:non-scaling-stroke}
+.surfaceSvg .line{fill:none;stroke:#53e7f0;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke;filter:drop-shadow(0 1px 1px rgba(0,0,0,.6))}
+.surfaceSvg .yardFill{fill:rgba(74,142,91,.15);stroke:#d9ffe1;stroke-width:2;vector-effect:non-scaling-stroke}
+.surfaceSvg .deckFill{fill:rgba(226,179,83,.16);stroke:#fff0c8;stroke-width:2;vector-effect:non-scaling-stroke}
+.surfaceGroup{display:none}.hero[data-surface="finish"] .surfaceFinish,.hero[data-surface="tile"] .surfaceTile,.hero[data-surface="deck"] .surfaceDeck,.hero[data-surface="yard"] .surfaceYard{display:block}
+.surfaceLabel{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:10;background:rgba(7,28,29,.88);color:#fff;padding:9px 14px;border-radius:999px;font:800 12px Arial;white-space:nowrap}
+.zoomControls{position:absolute;right:16px;bottom:14px;z-index:11;display:flex;gap:8px}.zoomControls button{width:44px;height:44px;border:0;border-radius:50%;background:rgba(255,255,255,.94);color:#102628;font:800 22px Arial;box-shadow:0 2px 10px rgba(0,0,0,.16)}
+.panHint{position:absolute;right:16px;top:17px;z-index:11;background:rgba(7,28,29,.68);color:#fff;padding:8px 11px;border-radius:9px;font:700 11px Arial}
+.renderBtn{display:block;width:100%;border:0;border-radius:10px;padding:14px;background:#102628;color:#fff;font-weight:800;margin:14px 0;cursor:pointer}.renderMsg{font-size:12px;color:#687171;margin:8px 0 18px}.hero.rendering:after{content:'Creating realistic pool preview…';position:absolute;inset:0;background:rgba(0,0,0,.52);color:#fff;display:grid;place-items:center;font:800 16px Arial;z-index:30}
+</style><script>
+(function(){
+ const hero=document.querySelector('.hero'),pic=hero.querySelector(':scope > img');
+ const stage=document.createElement('div');stage.className='photoStage';hero.insertBefore(stage,pic);stage.appendChild(pic);
+ stage.insertAdjacentHTML('beforeend',\`<svg class="surfaceSvg" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+ <g class="surfaceGroup surfaceFinish"><polygon class="fill" points="117,545 853,514 1000,664 926,950 80,919"/></g>
+ <g class="surfaceGroup surfaceTile"><polyline class="line" points="98,524 853,516 1000,537 982,550 853,530 108,540"/></g>
+ <g class="surfaceGroup surfaceDeck"><polygon class="deckFill" points="0,610 110,540 240,580 380,700 505,657 625,620 750,602 1000,580 1000,1000 930,950 835,900 735,865 620,835 520,825 430,840 355,875 280,925 205,965 110,985 0,1000"/></g>
+ <g class="surfaceGroup surfaceYard"><polygon class="yardFill" points="0,350 135,315 280,330 430,320 590,330 760,315 1000,335 1000,555 860,525 715,520 565,525 420,520 275,535 135,545 0,575"/></g>
+ </svg>\`);
+ const label=document.createElement('div');label.className='surfaceLabel';hero.appendChild(label);
+ const hint=document.createElement('div');hint.className='panHint';hint.textContent='Pinch / drag to inspect';hero.appendChild(hint);
+ const ctr=document.createElement('div');ctr.className='zoomControls';ctr.innerHTML='<button type="button" data-z="out">−</button><button type="button" data-z="reset">↻</button><button type="button" data-z="in">+</button>';hero.appendChild(ctr);
+ const names={phase1:['finish','Plaster / pool interior'],phase2:['tile','Waterline tile band'],phase3:['deck','Decking / hardscape'],phase4:['yard','Yard / landscaping']};
+ function phase(){const x=document.querySelector('input[name="phase"]:checked');const v=names[x&&x.id]||names.phase1;hero.dataset.surface=v[0];label.textContent=v[1]}
+ document.querySelectorAll('input[name="phase"]').forEach(x=>x.addEventListener('change',phase));phase();
+ let scale=1,tx=0,ty=0,start=null,pinch=null;
+ function apply(){stage.style.transform='translate('+tx+'px,'+ty+'px) scale('+scale+')'}
+ function zoom(delta,cx=hero.clientWidth/2,cy=hero.clientHeight/2){const old=scale;scale=Math.max(1,Math.min(3.5,scale+delta));if(scale===1){tx=0;ty=0}else{tx=(tx-cx)*(scale/old)+cx;ty=(ty-cy)*(scale/old)+cy}apply()}
+ ctr.addEventListener('click',e=>{const z=e.target.dataset.z;if(!z)return;if(z==='in')zoom(.35);if(z==='out')zoom(-.35);if(z==='reset'){scale=1;tx=0;ty=0;apply()}});
+ hero.addEventListener('wheel',e=>{e.preventDefault();const r=hero.getBoundingClientRect();zoom(e.deltaY<0?.18:-.18,e.clientX-r.left,e.clientY-r.top)},{passive:false});
+ hero.addEventListener('touchstart',e=>{if(e.touches.length===2){const a=e.touches[0],b=e.touches[1];pinch={d:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),s:scale};e.preventDefault()}else if(e.touches.length===1&&scale>1){start={x:e.touches[0].clientX-tx,y:e.touches[0].clientY-ty};e.preventDefault()}},{passive:false});
+ hero.addEventListener('touchmove',e=>{if(e.touches.length===2&&pinch){const a=e.touches[0],b=e.touches[1],d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);scale=Math.max(1,Math.min(3.5,pinch.s*d/pinch.d));apply();e.preventDefault()}else if(e.touches.length===1&&start&&scale>1){tx=e.touches[0].clientX-start.x;ty=e.touches[0].clientY-start.y;apply();e.preventDefault()}},{passive:false});
+ hero.addEventListener('touchend',()=>{start=null;pinch=null;if(scale<=1){scale=1;tx=0;ty=0;apply()}});
+ const btn=document.createElement('button');btn.className='renderBtn';btn.textContent='RENDER MY SELECTIONS';const msg=document.createElement('div');msg.className='renderMsg';msg.textContent='Choose finish, tile, deck and yard, then create the realistic pool preview.';document.querySelector('.choiceArea').append(btn,msg);
+ function sel(n){return document.querySelector('input[name="'+n+'"]:checked')}function lab(n){const x=sel(n);return x?document.querySelector('label[for="'+x.id+'"]'):null}function text(n){const l=lab(n);return l?l.innerText.replace(/\\n/g,' ').trim():''}function image(n){const l=lab(n),im=l&&l.querySelector('img');return im?im.src:''}
+ btn.onclick=async()=>{hero.classList.add('rendering');btn.disabled=true;msg.textContent='Applying your materials to the fixed pool scene…';try{const r=await fetch('/api/render',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({finish:text('finish'),tile:text('tile'),tileImage:image('tile'),deck:text('deck'),deckImage:image('deck'),yard:text('yard')})});const j=await r.json();if(!r.ok)throw Error(j.error||'Render failed');pic.src=j.image;msg.textContent='Rendered. Change a selection and render again to compare.'}catch(e){msg.textContent='Render failed: '+e.message}finally{hero.classList.remove('rendering');btn.disabled=false}}
+})();
+</script></body>`);
+ return h;
+}
+let UI;try{UI=loadUI();console.log('Loaded fixed-scene LIV visualizer')}catch(e){console.error(e);UI='<!doctype html><h1>LIV Visualizer temporarily unavailable</h1>'}
+http.createServer(async(req,res)=>{const p=(req.url||'/').split('?')[0];if(p==='/hero.jpg'){res.writeHead(200,{'Content-Type':'image/jpeg','Cache-Control':'public,max-age=31536000,immutable'});return res.end(HERO_BUF)}if(p==='/api/render'&&req.method==='POST'){try{return send(res,200,{image:await render(await body(req))})}catch(e){console.error(e);return send(res,500,{error:e.message})}}if(p==='/'||p==='/index.html'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store, no-cache, must-revalidate'});return res.end(UI)}res.writeHead(404);res.end('Not found')}).listen(port,'0.0.0.0',()=>console.log('LIV fixed-scene material visualizer on '+port));
