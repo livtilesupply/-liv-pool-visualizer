@@ -1,0 +1,1 @@
+fixed pool hero asset will be committed as binary
