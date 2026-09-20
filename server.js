@@ -1,10 +1,17 @@
 const http=require('http'),fs=require('fs'),path=require('path');
 const port=process.env.PORT||3000;
-const HERO=fs.readFileSync(path.join(__dirname,'hero.jpg'));
-const JS=fs.readFileSync(path.join(__dirname,'enhance.js'));
-const CSS=fs.readFileSync(path.join(__dirname,'enhance.css'));
-const BUILD='2026-09-20-zero-credit-1';
-function loadUI(){let h=fs.readdirSync(path.join(__dirname,'ui-live')).filter(x=>x.endsWith('.txt')).sort().map(x=>fs.readFileSync(path.join(__dirname,'ui-live',x),'utf8')).join('');h=h.replace(/(<section class="hero"><img src=")[^"]+("[^>]*>)/,'$1/hero.jpg?v='+BUILD+'$2').replace('Tap a real finish, tile or deck product. Your selection is applied to the preview immediately.','Choose real materials and preview them instantly — no AI credits required.');h=h.replace('</head>','<link rel="stylesheet" href="/enhance.css?v='+BUILD+'"></head>').replace('</body>','<script src="/enhance.js?v='+BUILD+'" defer></script></body>');return h}
-const UI=Buffer.from(loadUI());
-function send(res,s,t,b,c='no-store'){res.writeHead(s,{'Content-Type':t,'Content-Length':b.length,'Cache-Control':c,'X-Content-Type-Options':'nosniff'});res.end(b)}
-http.createServer((req,res)=>{const p=(req.url||'/').split('?')[0];if((p==='/'||p==='/index.html')&&req.method==='GET')return send(res,200,'text/html; charset=utf-8',UI);if(p==='/hero.jpg'&&req.method==='GET')return send(res,200,'image/jpeg',HERO,'public, max-age=3600');if(p==='/enhance.js'&&req.method==='GET')return send(res,200,'application/javascript; charset=utf-8',JS,'no-cache');if(p==='/enhance.css'&&req.method==='GET')return send(res,200,'text/css; charset=utf-8',CSS,'no-cache');if(p==='/api/health'&&req.method==='GET'){const b=Buffer.from(JSON.stringify({ok:true,build:BUILD,mode:'zero-credit-browser-visualizer',apiCreditsRequired:false,heroBytes:HERO.length,uiBytes:UI.length,jsBytes:JS.length,cssBytes:CSS.length}));return send(res,200,'application/json; charset=utf-8',b)}return send(res,404,'text/plain; charset=utf-8',Buffer.from('Not found'))}).listen(port,'0.0.0.0',()=>console.log('LIV '+BUILD+' running on '+port+' hero='+HERO.length+' ui='+UI.length));
+const files={
+ '/':{p:'index.html',t:'text/html; charset=utf-8',c:'no-store'},
+ '/index.html':{p:'index.html',t:'text/html; charset=utf-8',c:'no-store'},
+ '/style.css':{p:'style.css',t:'text/css; charset=utf-8',c:'no-cache'},
+ '/app.js':{p:'app.js',t:'application/javascript; charset=utf-8',c:'no-cache'},
+ '/hero.jpg':{p:'hero.jpg',t:'image/jpeg',c:'public, max-age=3600'}
+};
+const root=__dirname;
+const cache={};
+for(const k of Object.keys(files)){const f=files[k];cache[k]=fs.readFileSync(path.join(root,f.p))}
+const js=cache['/app.js'].toString('utf8');new Function(js);
+const html=cache['/'].toString('utf8');
+const checks={hero:cache['/hero.jpg'].length>10000,html:html.includes('id="poolPhoto"')&&html.includes('/app.js'),js:js.includes("resetMasks();renderCards();updatePreview();estimate();")&&js.includes("$('#demoPhoto').onclick"),zeroApi:!js.includes('/api/')};
+console.log('LIV standalone selftest '+JSON.stringify({ok:Object.values(checks).every(Boolean),checks,heroBytes:cache['/hero.jpg'].length,htmlBytes:cache['/'].length,jsBytes:cache['/app.js'].length}));
+http.createServer((req,res)=>{const p=(req.url||'/').split('?')[0];if(p==='/api/health'){const b=Buffer.from(JSON.stringify({ok:Object.values(checks).every(Boolean),build:'standalone-zero-api-20260920b',apiCreditsRequired:false,checks,heroBytes:cache['/hero.jpg'].length}));res.writeHead(200,{'Content-Type':'application/json','Content-Length':b.length,'Cache-Control':'no-store'});return res.end(b)}const meta=files[p];if(!meta){res.writeHead(404,{'Content-Type':'text/plain'});return res.end('Not found')}const b=cache[p];res.writeHead(200,{'Content-Type':meta.t,'Content-Length':b.length,'Cache-Control':meta.c,'X-Content-Type-Options':'nosniff'});res.end(b)}).listen(port,'0.0.0.0',()=>console.log('LIV standalone zero-API visualizer running on '+port));
