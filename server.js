@@ -2,6 +2,10 @@ const http=require('http'),fs=require('fs'),path=require('path'),OpenAI=require(
 const {toFile}=require('openai/uploads');
 const port=process.env.PORT||3000,MAX=28*1024*1024;
 const HERO_BUF=fs.readFileSync(path.join(__dirname,'hero.jpg'));
+const ENHANCE_JS=fs.readFileSync(path.join(__dirname,'enhance.js'));
+const ENHANCE_CSS=fs.readFileSync(path.join(__dirname,'enhance.css'));
+const BUILD='2026-09-20-stable-1',RENDER_LIMIT=12,RENDER_COOLDOWN=10000;
+const renderHistory=new Map(),lastRenderAttempt=new Map(),activeRenders=new Set();
 function send(res,s,o){res.writeHead(s,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(o))}
 function readBody(req){return new Promise((ok,no)=>{let n=0,a=[];req.on('data',c=>{n+=c.length;if(n>MAX){no(Error('Photo is too large. Please use a smaller photo.'));req.destroy();return}a.push(c)});req.on('end',()=>{try{ok(JSON.parse(Buffer.concat(a).toString()||'{}'))}catch(e){no(e)}});req.on('error',no)})}
 function mime(buf){if(buf[0]===0x89&&buf[1]===0x50)return'image/png';if(buf[0]===0xff&&buf[1]===0xd8)return'image/jpeg';if(buf[0]===0x52&&buf[1]===0x49)return'image/webp';return'image/jpeg'}
@@ -14,9 +18,69 @@ async function analyzeScene(client,base){try{const r=await client.responses.crea
 async function render(b){if(!process.env.OPENAI_API_KEY)throw Error('AI renderer is not configured');const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});const base=await inputBuffer(b.sourceImage);const scene=await analyzeScene(client,base);const refs=[await toFile(base,'pool-base.jpg',{type:mime(base)})];let role=2;const roles=[];const finishRef=await refFromSource(b.finishImage,'finish.jpg');const tileRef=await refFromSource(b.tileImage,'tile.jpg');const deckRef=await refFromSource(b.deckImage,'deck.jpg');if(finishRef){refs.push(finishRef);roles.push(`Image ${role++} is the selected pool-finish reference.`)}if(tileRef){refs.push(tileRef);roles.push(`Image ${role++} is the exact selected waterline-tile product.`)}if(deckRef){refs.push(deckRef);roles.push(`Image ${role++} is the exact selected deck/paver product.`)}
 const prompt=`Photorealistically edit Image 1 as the SAME private residential pool photo. Image 1 is the composition authority. ${roles.join(' ')}\nScene analysis: ${scene}\nSelected pool finish: ${b.finish||'keep existing'}. Selected waterline tile: ${b.tile||'keep existing'}. Selected deck: ${b.deck||'keep existing'}. Yard direction: ${b.yard||'keep existing'}.\nApply each selected material ONLY to its real physical surface. Pool finish must change only the submerged interior shell and resulting water tone while preserving reflections, ripples, depth and caustics. Waterline tile must be installed only on the narrow existing waterline band and raised-spa/water-feature tile areas where tile is physically present. Deck/paver must change only existing horizontal coping and deck/hardscape. Landscaping changes must stay outside the hardscape. Preserve pool shape, raised spa/water feature, steps, house edge, block wall, furniture, shadows, camera angle and perspective. Never place tile or pavers in the air, sky, water surface, vertical house walls or plants. No floating textures, outlines, masks, labels, or redesign. Produce one believable after-photo where the pool interior, waterline tile and deck are all clearly visible.`;
 const out=await client.images.edit({model:'gpt-image-2',image:refs,prompt,size:'1536x1024',quality:'high',input_fidelity:'high'});const x=out.data&&out.data[0];if(!x)throw Error('Renderer returned no image');if(x.b64_json)return {image:'data:image/png;base64,'+x.b64_json};if(x.url)return {image:'data:image/png;base64,'+(await fetchBuffer(x.url)).toString('base64')};throw Error('Renderer returned unusable image')}
-function loadUI(){let h=fs.readdirSync(path.join(__dirname,'ui-live')).filter(x=>x.endsWith('.txt')).sort().map(x=>fs.readFileSync(path.join(__dirname,'ui-live',x),'utf8')).join('');h=h.replace(/(<section class="hero"><img src=")[^"]+("[^>]*>)/,'$1/hero.jpg?v=10$2').replace('Tap a real finish, tile or deck product. Your selection is applied to the preview immediately.','Choose a finish, tile or deck product. The pool preview renders automatically.');h=h.replace('</body>',`<style>
-.waterTint,.tileOverlay,.deckOverlay{display:none!important}.hero{height:auto!important;min-height:0!important;aspect-ratio:707/420;overflow:hidden!important;background:#111}.hero>img{width:100%;height:100%;object-fit:cover;object-position:center center}.heroCopy{max-width:340px}.surfaceBadge{position:absolute;right:14px;bottom:14px;z-index:9;background:rgba(7,28,29,.90);color:#fff;padding:8px 11px;border-radius:999px;font:800 11px Arial}.renderMsg{font-size:12px;color:#687171;margin:8px 0 18px;line-height:1.4}.hero.rendering:after{content:'Applying selected material to the real pool…';position:absolute;inset:0;background:rgba(0,0,0,.50);color:#fff;display:grid;place-items:center;text-align:center;padding:30px;font:800 15px Arial;z-index:30}.hero.rendering img{filter:brightness(.78)}.photoTools{margin:14px 0 8px;padding:13px;border:1px solid #d7dddd;border-radius:12px;background:#f8fafa}.photoTools strong{display:block;font-size:14px;margin-bottom:4px}.photoTools small{display:block;color:#687171;line-height:1.35}.uploadBtn{display:inline-block;margin-top:9px;background:#102628;color:#fff;border-radius:8px;padding:10px 12px;font-weight:800;font-size:11px}.selectionState{margin:10px 0 4px;padding:10px 12px;border-radius:9px;background:#eef4f4;font-size:12px;font-weight:700;color:#183031}
-@media(max-width:620px){.hero{aspect-ratio:707/420!important;height:auto!important;min-height:0!important}.heroCopy{left:13px;top:13px;max-width:250px}.heroCopy h1{font-size:27px}}
-</style><script>(function(){const hero=document.querySelector('.hero'),pic=hero.querySelector(':scope > img'),area=document.querySelector('.choiceArea');let sourceImage='',timer=null,running=false,pending=false;const badge=document.createElement('div');badge.className='surfaceBadge';badge.textContent='Pool-first view';hero.appendChild(badge);const tools=document.createElement('div');tools.className='photoTools';tools.innerHTML='<strong>Optional: use your own pool photo</strong><small>The demo now uses the pool-focused photo you selected, with the plaster, waterline tile and deck all visible.</small><label class="uploadBtn" for="poolPhoto">UPLOAD POOL PHOTO</label><input id="poolPhoto" type="file" accept="image/*" style="display:none"><div class="selectionState" id="selectionState">Tap any material below to render it onto the pool.</div>';area.prepend(tools);const input=tools.querySelector('#poolPhoto'),state=tools.querySelector('#selectionState');function resize(file){return new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const max=1800,s=Math.min(1,max/Math.max(im.width,im.height)),w=Math.round(im.width*s),hh=Math.round(im.height*s),c=document.createElement('canvas');c.width=w;c.height=hh;c.getContext('2d').drawImage(im,0,0,w,hh);ok(c.toDataURL('image/jpeg',.88))};im.onerror=no;im.src=r.result};r.onerror=no;r.readAsDataURL(file)})}input.onchange=async()=>{if(!input.files[0])return;state.textContent='Preparing your photo…';try{sourceImage=await resize(input.files[0]);pic.src=sourceImage;state.textContent='Your photo is ready. Tap a material to render it.'}catch(e){state.textContent='Could not load that photo.'}};function sel(n){return document.querySelector('input[name="'+n+'"]:checked')}function lab(n){const x=sel(n);return x?document.querySelector('label[for="'+x.id+'"]'):null}function txt(n){const l=lab(n);return l?l.innerText.replace(/\\n/g,' ').trim():''}function img(n){const l=lab(n),i=l&&l.querySelector('img');return i?i.src:''}function payload(){return{sourceImage,finish:txt('finish'),finishImage:img('finish'),tile:txt('tile'),tileImage:img('tile'),deck:txt('deck'),deckImage:img('deck'),yard:txt('yard')}}async function doRender(){if(running){pending=true;return}running=true;pending=false;hero.classList.add('rendering');state.textContent='Rendering your current selections…';try{const r=await fetch('/api/render',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())});const j=await r.json();if(!r.ok)throw Error(j.error||'Render failed');pic.src=j.image;sourceImage=j.image;state.textContent='Preview updated. Tap another material to compare.'}catch(e){state.textContent='Render failed: '+e.message}finally{running=false;hero.classList.remove('rendering');if(pending)setTimeout(doRender,200)}}function schedule(n){clearTimeout(timer);const l=lab(n);state.textContent=(l?'Selected '+l.innerText.replace(/\\n/g,' ').trim()+'. ':'Selection changed. ')+'Rendering…';timer=setTimeout(doRender,650)}['finish','tile','deck','yard'].forEach(n=>document.querySelectorAll('input[name="'+n+'"]').forEach(x=>x.addEventListener('change',()=>schedule(n))));})();</script></body>`);return h}
+
+function plain(v,n=240){return String(v||'').replace(/\s+/g,' ').trim().slice(0,n)}
+function parseJsonText(t){const s=String(t||'').trim();try{return JSON.parse(s)}catch{}const m=s.match(/\{[\s\S]*\}/);if(!m)return null;try{return JSON.parse(m[0])}catch{return null}}
+async function findPlaster(q){
+  if(!process.env.OPENAI_API_KEY){const e=Error('AI lookup is not configured');e.status=503;throw e}
+  q=plain(q,120);if(q.length<2){const e=Error('Type a plaster or pool-finish name first.');e.status=400;throw e}
+  const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});
+  const r=await client.responses.create({
+    model:'gpt-5-mini',
+    tools:[{type:'web_search'}],
+    input:'Find the swimming-pool interior finish that best matches this customer search: "'+q+'". Prefer an official manufacturer page or reputable pool-finish source. Return ONLY valid JSON with keys name, brand, family, description, sourceUrl. name should be the exact product/finish name when available and description should be one short sentence about visible color/aggregate appearance.'
+  });
+  const x=parseJsonText(r.output_text);
+  if(!x||!x.name)return{name:q,brand:'Custom finish',family:'Pool finish',description:plain(r.output_text,260)||'Custom pool-finish option.',sourceUrl:''};
+  return{name:plain(x.name,120),brand:plain(x.brand,80),family:plain(x.family,80),description:plain(x.description,260),sourceUrl:/^https?:\/\//i.test(String(x.sourceUrl||''))?String(x.sourceUrl):''}
+}
+function ipOf(req){const f=String(req.headers['x-forwarded-for']||'').split(',')[0].trim();return f||req.socket.remoteAddress||'unknown'}
+function enterRender(req){
+  const ip=ipOf(req),now=Date.now();
+  if(activeRenders.has(ip))return{ok:false,status:429,error:'A render is already running. Please wait for it to finish.'};
+  const last=lastRenderAttempt.get(ip)||0;
+  if(now-last<RENDER_COOLDOWN)return{ok:false,status:429,error:'Please wait '+Math.max(1,Math.ceil((RENDER_COOLDOWN-(now-last))/1000))+' seconds before generating another preview.'};
+  const cutoff=now-3600000,recent=(renderHistory.get(ip)||[]).filter(t=>t>cutoff);
+  renderHistory.set(ip,recent);
+  if(recent.length>=RENDER_LIMIT)return{ok:false,status:429,error:'Render limit reached for this hour. Please try again later.'};
+  lastRenderAttempt.set(ip,now);activeRenders.add(ip);return{ok:true,ip}
+}
+function leaveRender(ip,success){activeRenders.delete(ip);if(success){const a=renderHistory.get(ip)||[];a.push(Date.now());renderHistory.set(ip,a)}}
+function apiMessage(e){
+  const code=String(e.code||e.error?.code||''),type=String(e.type||e.error?.type||'');
+  if(code==='credit_balance_exhausted'||type==='insufficient_quota')return{status:402,error:'AI rendering is temporarily unavailable because the site API credit balance is empty.'};
+  if(e.status===429||code.includes('rate_limit'))return{status:429,error:'The AI renderer is busy right now. Please wait a moment and try again.'};
+  if(e.status&&e.status>=400&&e.status<500)return{status:e.status,error:plain(e.message,220)||'Request could not be completed.'};
+  return{status:500,error:'The render could not be completed. Please try again.'}
+}
+
+function loadUI(){
+  let h=fs.readdirSync(path.join(__dirname,'ui-live')).filter(x=>x.endsWith('.txt')).sort().map(x=>fs.readFileSync(path.join(__dirname,'ui-live',x),'utf8')).join('');
+  h=h.replace(/(<section class="hero"><img src=")[^"]+("[^>]*>)/,'$1/hero.jpg?v='+BUILD+'$2');
+  h=h.replace('Tap a real finish, tile or deck product. Your selection is applied to the preview immediately.','Choose your real materials, then generate one photorealistic pool preview.');
+  h=h.replace(/<p class="note">[\s\S]*?<\/p><\/aside>/,'<p class="note">Selections are for design planning. Use Generate My Pool for the photorealistic AI result.</p></aside>');
+  h=h.replace('</head>','<link rel="stylesheet" href="/enhance.css?v='+BUILD+'"></head>');
+  h=h.replace('</body>','<script src="/enhance.js?v='+BUILD+'" defer></script></body>');
+  return h
+}
 let UI;try{UI=loadUI()}catch(e){console.error(e);UI='<!doctype html><h1>LIV Visualizer unavailable</h1>'}
-http.createServer(async(req,res)=>{const p=(req.url||'/').split('?')[0];if(p==='/hero.jpg'){res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':HERO_BUF.length,'Cache-Control':'no-store'});return res.end(HERO_BUF)}if(p==='/api/health')return send(res,200,{ok:true,heroBytes:HERO_BUF.length,autoRender:true,mode:'ai-surface-aware'});if(p==='/api/render'&&req.method==='POST'){try{return send(res,200,await render(await readBody(req)))}catch(e){console.error('render error',e);return send(res,500,{error:e.message})}}if(p==='/'||p==='/index.html'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store, no-cache, must-revalidate','Pragma':'no-cache','Expires':'0'});return res.end(UI)}res.writeHead(404);res.end('Not found')}).listen(port,'0.0.0.0',()=>console.log('LIV pool-first auto-render visualizer on '+port));
+const SELF_CHECKS={hero:HERO_BUF.length>10000,ui:UI.includes('/enhance.js'),js:ENHANCE_JS.includes('generatePool'),plaster:ENHANCE_JS.includes('finishSearch'),zoom:ENHANCE_JS.includes('zoomTools'),disclaimer:ENHANCE_JS.includes('Visualizer disclaimer')};
+console.log('LIV selftest '+JSON.stringify({ok:Object.values(SELF_CHECKS).every(Boolean),build:BUILD,heroBytes:HERO_BUF.length,apiKeyConfigured:!!process.env.OPENAI_API_KEY,checks:SELF_CHECKS}));
+
+http.createServer(async(req,res)=>{
+  const p=(req.url||'/').split('?')[0];
+  if(p==='/hero.jpg'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':HERO_BUF.length,'Cache-Control':'public, max-age=3600','X-Content-Type-Options':'nosniff'});return res.end(HERO_BUF)}
+  if(p==='/enhance.js'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/javascript; charset=utf-8','Content-Length':ENHANCE_JS.length,'Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'});return res.end(ENHANCE_JS)}
+  if(p==='/enhance.css'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'text/css; charset=utf-8','Content-Length':ENHANCE_CSS.length,'Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'});return res.end(ENHANCE_CSS)}
+  if(p==='/api/health'&&req.method==='GET')return send(res,200,{ok:Object.values(SELF_CHECKS).every(Boolean),build:BUILD,heroBytes:HERO_BUF.length,apiKeyConfigured:!!process.env.OPENAI_API_KEY,renderMode:'manual-final-render',imageModel:'gpt-image-2',analysisModel:'gpt-5-mini',renderLimitPerHour:RENDER_LIMIT,checks:SELF_CHECKS});
+  if(p==='/api/find-plaster'&&req.method==='POST'){try{return send(res,200,await findPlaster((await readBody(req)).query))}catch(e){console.error('plaster lookup error',e.code||e.message);const m=apiMessage(e);return send(res,m.status,{error:m.error})}}
+  if(p==='/api/render'&&req.method==='POST'){
+    const gate=enterRender(req);if(!gate.ok)return send(res,gate.status,{error:gate.error});
+    let success=false;
+    try{const out=await render(await readBody(req));success=true;return send(res,200,out)}
+    catch(e){console.error('render error',e.code||e.message);const m=apiMessage(e);return send(res,m.status,{error:m.error})}
+    finally{leaveRender(gate.ip,success)}
+  }
+  if((p==='/'||p==='/index.html')&&req.method==='GET'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store, no-cache, must-revalidate','Pragma':'no-cache','Expires':'0','X-Content-Type-Options':'nosniff','Referrer-Policy':'strict-origin-when-cross-origin'});return res.end(UI)}
+  res.writeHead(404,{'Content-Type':'text/plain; charset=utf-8'});res.end('Not found')
+}).listen(port,'0.0.0.0',()=>console.log('LIV visualizer '+BUILD+' running on '+port+' hero='+HERO_BUF.length+' bytes'));
