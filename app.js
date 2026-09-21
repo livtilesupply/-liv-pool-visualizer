@@ -37,7 +37,7 @@ function card(root,arr,type){
 function renderCards(){card($('#finishes'),F,'f');card($('#tiles'),T,'t');card($('#decks'),D,'d');card($('#yards'),Y,'y')}
 function update(){
  const f=F[sel.f],t=T[sel.t],d=D[sel.d],y=Y[sel.y];
- finishOv.style.background=f[2];
+ finishOv.style.background='linear-gradient(180deg,'+f[2]+', '+f[2]+')';
  tileOv.style.backgroundColor=t[2];tileOv.style.backgroundImage='linear-gradient(90deg,rgba(255,255,255,.22) 1px,transparent 1px),linear-gradient(rgba(255,255,255,.16) 1px,transparent 1px),linear-gradient(135deg,'+t[2]+',#d9e6e6)';
  deckOv.style.backgroundColor=d[2];deckOv.style.backgroundImage='linear-gradient(90deg,rgba(80,80,80,.12) 1px,transparent 1px),linear-gradient(rgba(80,80,80,.10) 1px,transparent 1px),linear-gradient(135deg,'+d[2]+',#ece9e2)';
  $('#sf').textContent=f[0];$('#st').textContent=t[0];$('#sd').textContent=d[0];$('#sy').textContent=y[0];
@@ -54,12 +54,12 @@ hero.onpointerdown=e=>{if(hero.classList.contains('editing')||scale<=1||e.target
 hero.onpointermove=e=>{if(!drag)return;tx+=e.clientX-lx;ty+=e.clientY-ly;lx=e.clientX;ly=e.clientY;view()}
 hero.onpointerup=hero.onpointercancel=()=>drag=false;
 function resize(file){return new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const m=1800,s=Math.min(1,m/Math.max(im.width,im.height)),w=Math.round(im.width*s),h=Math.round(im.height*s),c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(im,0,0,w,h);ok(c.toDataURL('image/jpeg',.9))};im.onerror=no;im.src=r.result};r.onerror=no;r.readAsDataURL(file)})}
-$('#upload').onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;try{photo.src=await resize(f);finishOv.style.opacity=tileOv.style.opacity=deckOv.style.opacity=0;resetView();state('Photo loaded. Tap MARK PHOTO AREAS to outline pool, waterline and deck.','warn')}catch{state('Could not load that image. Try JPG or PNG.','error')}}
-$('#demo').onclick=()=>{photo.src=original;masks={pool:def.pool.map(p=>p.slice()),tile:def.tile.map(p=>p.slice()),deck:def.deck.map(p=>p.slice())};masksApply();applyRanges();resetView();state('Demo photo restored.','ok')}
+$('#upload').onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;try{photo.src=await resize(f);finishOv.style.opacity=tileOv.style.opacity=deckOv.style.opacity=0;resetView();$('#mark').classList.remove('hiddenBtn');state('Photo loaded. Tap SET AREAS FOR THIS PHOTO once, then your material previews will stay inside those areas.','warn')}catch{state('Could not load that image. Try JPG or PNG.','error')}}
+$('#demo').onclick=()=>{queue=[];edit=null;pts=[];draw();hero.classList.remove('editing');$('#editBar').classList.remove('active');$('#mark').classList.add('hiddenBtn');photo.src=original;masks={pool:def.pool.map(p=>p.slice()),tile:def.tile.map(p=>p.slice()),deck:def.deck.map(p=>p.slice())};masksApply();applyRanges();resetView();state('Demo photo restored. Tap any material — no area marking needed.','ok')}
 $('#mark').onclick=()=>{queue=['tile','deck'];startEdit('pool')};$$('[data-edit]').forEach(b=>b.onclick=()=>startEdit(b.dataset.edit));
 function draw(){const l=$('#editLayer');l.innerHTML='';pts.forEach(p=>{const d=document.createElement('i');d.className='dot';d.style.left=p[0]+'%';d.style.top=p[1]+'%';l.appendChild(d)})}
 function startEdit(t){edit=t;pts=[];resetView();hero.classList.add('editing');$('#editBar').classList.add('active');$('#editTitle').textContent='Mark '+(t==='pool'?'pool interior':t==='tile'?'waterline tile band':'deck / coping');draw();state('Tap around the '+t+' area, then press Done.','warn')}
-$('#editLayer').onpointerdown=e=>{const r=e.currentTarget.getBoundingClientRect();pts.push([((e.clientX-r.left)/r.width*100),((e.clientY-r.top)/r.height*100)]);draw()}
+$('#editLayer').onclick=e=>{const r=e.currentTarget.getBoundingClientRect();pts.push([((e.clientX-r.left)/r.width*100),((e.clientY-r.top)/r.height*100)]);draw()}
 $('#undo').onclick=()=>{pts.pop();draw()};$('#clear').onclick=()=>{pts=[];draw()};$('#cancel').onclick=()=>{queue=[];edit=null;pts=[];draw();hero.classList.remove('editing');$('#editBar').classList.remove('active');state('Area editing cancelled.','warn')}
 $('#done').onclick=()=>{if(pts.length<3)return state('Add at least 3 points.','warn');masks[edit]=pts.map(p=>p.slice());masksApply();const was=edit;edit=null;pts=[];draw();hero.classList.remove('editing');$('#editBar').classList.remove('active');if(was==='pool')finishOv.style.opacity=$('#fo').value/100;if(was==='tile')tileOv.style.opacity=$('#to').value/100;if(was==='deck')deckOv.style.opacity=$('#do').value/100;state('Area saved.','ok');if(queue.length)startEdit(queue.shift())}
 function bind(id,el,kind,sfx){const x=$('#'+id),o=x.parentElement.querySelector('output');const go=()=>{if(kind==='o')el.style.opacity=x.value/100;else el.style.backgroundSize=x.value+'px '+x.value+'px';o.textContent=x.value+sfx};x.oninput=go;go()}
@@ -67,6 +67,6 @@ function applyRanges(){bind('fo',finishOv,'o','%');bind('to',tileOv,'o','%');bin
 $('#addCustom').onclick=()=>{const n=$('#customName').value.trim();if(!n)return state('Type a finish name first.','warn');F.push([n,'Custom',$('#customColor').value]);sel.f=F.length-1;update();state(n+' added.','ok')}
 function est(){const l=+$('#len').value,w=+$('#wid').value,d=+$('#dw').value,p=2*(l+w);$('#et').textContent='~'+Math.ceil(p*.5*1.1)+' sq ft';$('#ed').textContent='~'+Math.ceil(((l+2*d)*(w+2*d)-l*w)*1.1)+' sq ft';$('#ec').textContent='~'+Math.ceil(p)+' ln ft'}
 $$('#len,#wid,#dw').forEach(s=>s.onchange=est);
-masksApply();applyRanges();update();est();
+masksApply();applyRanges();update();est();$('#mark').classList.add('hiddenBtn');
 window.__LIV_READY__=true;
 })();
