@@ -57,3 +57,7 @@ aside h3{font-size:14px;margin:0 0 10px}.box{background:white;border:1px solid v
 #tileOv{mix-blend-mode:multiply!important}
 #deckOv{mix-blend-mode:multiply!important}
 @media(max-width:520px){.tilePiece{background-size:34px auto}.deckPiece{background-size:108px auto}}
+
+/* final8: tighter, perspective-scaled material placement */
+#tileOv,.tilePiece{filter:saturate(.92) brightness(.92);mix-blend-mode:multiply!important}
+#deckOv,.deckPiece{filter:saturate(.78) brightness(1.02);mix-blend-mode:multiply!important}

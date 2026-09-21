@@ -26,17 +26,17 @@ const D=[
 const Y=[['Modern Desert','#b6a27c','#70825e'],['Green Resort','#6e9f6e','#b8d2b0'],['Contemporary','#727d78','#bbb4aa']];
 let sel={f:0,t:0,d:0,y:0};
 const demoTileMasks=[
- [[25,25],[49,25],[49,42],[25,42]],
- [[50,20],[91,17],[92,24],[50,28]],
- [[92,24],[100,29],[100,56],[97,52]],
- [[0,40],[24,28],[24,34],[0,49]],
- [[22,15],[49,14],[49,21],[22,22]]
+ [[25.0,26.0],[49.3,25.5],[49.3,45.0],[25.0,45.0]],
+ [[49.5,22.0],[91.3,17.8],[91.8,21.5],[49.5,25.4]],
+ [[91.4,21.7],[100,26.5],[100,29.6],[91.7,24.8]],
+ [[0,44.2],[22.8,28.0],[23.3,31.3],[0,48.8]],
+ [[19.6,19.7],[49.7,19.8],[49.8,22.8],[20.0,22.7]]
 ];
 const demoDeckMasks=[
- [[0,88],[100,88],[100,100],[0,100]],
- [[0,24],[24,12],[52,12],[49,19],[24,22],[0,38]],
- [[49,12],[91,11],[92,18],[50,21]],
- [[91,11],[100,9],[100,28],[93,24]]
+ [[0,88.0],[91.0,88.0],[100,84.5],[100,100],[0,100]],
+ [[0,37.0],[20.5,23.5],[23.2,25.8],[2.8,42.2],[0,42.8]],
+ [[49.2,15.8],[91.8,12.1],[92.2,16.7],[49.8,20.0]],
+ [[91.7,12.0],[100,8.5],[100,24.0],[92.4,20.0]]
 ];
 const extraTile=[], extraDeck=[];
 function makePiece(kind){
@@ -72,12 +72,12 @@ function update(){
  allTilePieces().forEach(el=>{
   el.style.backgroundColor=t[2];
   el.style.backgroundImage='url("'+t[3]+'"),linear-gradient(90deg,rgba(255,255,255,.20) 1px,transparent 1px),linear-gradient(rgba(255,255,255,.16) 1px,transparent 1px),linear-gradient(135deg,'+t[2]+',#d9e6e6)';
-  el.style.backgroundPosition='center';
+  el.style.backgroundPosition='center';el.style.backgroundRepeat='repeat';
  });
  allDeckPieces().forEach(el=>{
   el.style.backgroundColor=d[2];
   el.style.backgroundImage='url("'+d[3]+'"),linear-gradient(90deg,rgba(90,90,90,.10) 1px,transparent 1px),linear-gradient(rgba(90,90,90,.08) 1px,transparent 1px),linear-gradient(135deg,'+d[2]+',#ece9e2)';
-  el.style.backgroundPosition='center';
+  el.style.backgroundPosition='center';el.style.backgroundRepeat='repeat';
  });
  $('#sf').textContent=f[0];$('#st').textContent=t[0];$('#sd').textContent=d[0];$('#sy').textContent=y[0];
  $('#tileLink').href=t[4];$('#tileLink').textContent='VIEW SELECTED TILE — '+t[1];$('#deckLink').href=d[4];$('#deckLink').textContent='VIEW SELECTED DECK — '+d[1];
@@ -107,9 +107,13 @@ function bind(id,el,kind,sfx){const x=$('#'+id),o=x.parentElement.querySelector(
    else if(el===deckOv) allDeckPieces().forEach(p=>p.style.opacity=x.value/100);
    else el.style.opacity=x.value/100;
  }else{
-   if(el===tileOv) allTilePieces().forEach(p=>p.style.backgroundSize=x.value+'px auto');
-   else if(el===deckOv) allDeckPieces().forEach(p=>p.style.backgroundSize=x.value+'px auto');
-   else el.style.backgroundSize=x.value+'px auto';
+   if(el===tileOv){
+     const f=[1.0,.72,.62,.76,.68];
+     allTilePieces().forEach((p,i)=>p.style.backgroundSize=Math.max(10,Math.round(x.value*(f[i]||.7)))+'px auto');
+   } else if(el===deckOv){
+     const f=[1.0,.72,.62,.58];
+     allDeckPieces().forEach((p,i)=>p.style.backgroundSize=Math.max(42,Math.round(x.value*(f[i]||.65)))+'px auto');
+   } else el.style.backgroundSize=x.value+'px auto';
  }
  o.textContent=x.value+sfx
 };x.oninput=go;go()}
