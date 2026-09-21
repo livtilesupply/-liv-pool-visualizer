@@ -50,3 +50,10 @@ aside h3{font-size:14px;margin:0 0 10px}.box{background:white;border:1px solid v
 .hiddenBtn{display:none!important}
 #finishOv{mix-blend-mode:soft-light!important}
 @media(max-width:520px){.status{font-size:11px;line-height:1.35}.editBar{position:sticky;bottom:0;z-index:60}}
+
+.materialPiece{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;background-repeat:repeat;mix-blend-mode:multiply}
+.tilePiece{opacity:.64;background-size:38px auto}
+.deckPiece{opacity:.30;background-size:120px auto}
+#tileOv{mix-blend-mode:multiply!important}
+#deckOv{mix-blend-mode:multiply!important}
+@media(max-width:520px){.tilePiece{background-size:34px auto}.deckPiece{background-size:108px auto}}
