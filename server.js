@@ -15,7 +15,7 @@ const css=cache['/style.css'].toString('utf8');
 new Function(js);
 const checks={
  hero:cache['/hero.jpg'].length>10000,
- html:html.includes('id="photo"')&&html.includes('id="demo"')&&html.includes('/app.js?v=final4'),
+ html:html.includes('id="photo"')&&html.includes('id="demo"')&&html.includes('/app.js?v=final5')&&html.includes('data:image/jpeg;base64,/9j/'),
  js:js.includes('window.__LIV_READY__=true')&&js.includes("$('#demo').onclick")&&js.includes("$('#upload').onchange"),
  interactions:js.includes("$('#mark').onclick")&&js.includes("$('#addCustom').onclick")&&js.includes("function est()"),
  css:css.includes('.card.selected')&&css.includes('.editBar.active'),
@@ -26,7 +26,7 @@ console.log('LIV browser-tested selftest '+JSON.stringify({ok,checks,heroBytes:c
 http.createServer((req,res)=>{
  const p=(req.url||'/').split('?')[0];
  if(p==='/api/health'){
-   const b=Buffer.from(JSON.stringify({ok,build:'browser-tested-final4',apiCreditsRequired:false,checks,heroBytes:cache['/hero.jpg'].length}));
+   const b=Buffer.from(JSON.stringify({ok,build:'browser-tested-final5',apiCreditsRequired:false,checks,heroBytes:cache['/hero.jpg'].length}));
    res.writeHead(200,{'Content-Type':'application/json','Content-Length':b.length,'Cache-Control':'no-store'});
    return res.end(b);
  }
@@ -35,4 +35,4 @@ http.createServer((req,res)=>{
  const b=cache[p];
  res.writeHead(200,{'Content-Type':meta.t,'Content-Length':b.length,'Cache-Control':meta.c,'X-Content-Type-Options':'nosniff'});
  res.end(b);
-}).listen(port,'0.0.0.0',()=>console.log('LIV browser-tested final4 running on '+port));
+}).listen(port,'0.0.0.0',()=>console.log('LIV browser-tested final5 running on '+port));
