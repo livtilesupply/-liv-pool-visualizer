@@ -46,3 +46,7 @@ aside h3{font-size:14px;margin:0 0 10px}.box{background:white;border:1px solid v
 .disclaimer{font-size:9px;color:#747d7c;line-height:1.45;margin-top:16px;padding-top:10px;border-top:1px solid var(--line)}
 @media(max-width:850px){.wrap{display:block}aside{position:static;height:auto;border-left:0;border-top:1px solid var(--line)}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.status{margin-left:0;max-width:none;width:100%}}
 @media(max-width:520px){header{height:54px;padding:0 10px}.brand{font-size:18px}.shop{font-size:9px;padding:8px 9px}.heroText{left:9px;top:9px;max-width:220px;padding:10px}.heroText h1{font-size:24px}.heroText p{font-size:9.5px}.controls{padding:10px}.btn{flex:1;text-align:center}.content{padding:13px 10px 24px}.head{display:block}.editBtn{margin-top:8px}.cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.fine label{grid-template-columns:100px 1fr 35px}.customRow{flex-wrap:wrap}.customRow input[type=text]{flex-basis:100%}}
+
+.hiddenBtn{display:none!important}
+#finishOv{mix-blend-mode:soft-light!important}
+@media(max-width:520px){.status{font-size:11px;line-height:1.35}.editBar{position:sticky;bottom:0;z-index:60}}
