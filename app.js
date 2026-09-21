@@ -25,7 +25,7 @@ const D=[
 ];
 const Y=[['Modern Desert','#b6a27c','#70825e'],['Green Resort','#6e9f6e','#b8d2b0'],['Contemporary','#727d78','#bbb4aa']];
 let sel={f:0,t:0,d:0,y:0};
-const def={pool:[[0,60],[13,49],[21,39],[48,35],[89,30],[100,44],[100,88],[72,92],[50,86],[24,88],[0,77]],tile:[[25,28],[49,28],[49,42],[25,42]],deck:[[0,88],[30,83],[55,85],[100,86],[100,100],[0,100]]};
+const def={pool:[[0,60],[13,49],[21,39],[48,35],[89,30],[100,44],[100,88],[72,92],[50,86],[24,88],[0,77]],tile:[[49,22],[90,16],[92,20],[50,27]],deck:[[0,88],[30,83],[55,85],[100,86],[100,100],[0,100]]};
 let masks={pool:def.pool.map(p=>p.slice()),tile:def.tile.map(p=>p.slice()),deck:def.deck.map(p=>p.slice())};
 let edit=null,pts=[],queue=[],scale=1,tx=0,ty=0,drag=false,lx=0,ly=0;
 const poly=a=>'polygon('+a.map(p=>p[0]+'% '+p[1]+'%').join(',')+')';
@@ -38,8 +38,8 @@ function renderCards(){card($('#finishes'),F,'f');card($('#tiles'),T,'t');card($
 function update(){
  const f=F[sel.f],t=T[sel.t],d=D[sel.d],y=Y[sel.y];
  finishOv.style.background=f[2];
- tileOv.style.backgroundColor=t[2];tileOv.style.backgroundImage='url("'+t[3]+'"),linear-gradient(45deg,'+t[2]+' 25%,#d9edf0 25% 50%,'+t[2]+' 50% 75%,#d9edf0 75%)';
- deckOv.style.backgroundColor=d[2];deckOv.style.backgroundImage='url("'+d[3]+'"),linear-gradient(45deg,'+d[2]+' 25%,#eee 25% 50%,'+d[2]+' 50% 75%,#eee 75%)';
+ tileOv.style.backgroundColor=t[2];tileOv.style.backgroundImage='linear-gradient(90deg,rgba(255,255,255,.22) 1px,transparent 1px),linear-gradient(rgba(255,255,255,.16) 1px,transparent 1px),linear-gradient(135deg,'+t[2]+',#d9e6e6)';
+ deckOv.style.backgroundColor=d[2];deckOv.style.backgroundImage='linear-gradient(90deg,rgba(80,80,80,.12) 1px,transparent 1px),linear-gradient(rgba(80,80,80,.10) 1px,transparent 1px),linear-gradient(135deg,'+d[2]+',#ece9e2)';
  $('#sf').textContent=f[0];$('#st').textContent=t[0];$('#sd').textContent=d[0];$('#sy').textContent=y[0];
  $('#tileLink').href=t[4];$('#tileLink').textContent='VIEW SELECTED TILE — '+t[1];$('#deckLink').href=d[4];$('#deckLink').textContent='VIEW SELECTED DECK — '+d[1];
  renderCards();
@@ -61,7 +61,7 @@ function draw(){const l=$('#editLayer');l.innerHTML='';pts.forEach(p=>{const d=d
 function startEdit(t){edit=t;pts=[];resetView();hero.classList.add('editing');$('#editBar').classList.add('active');$('#editTitle').textContent='Mark '+(t==='pool'?'pool interior':t==='tile'?'waterline tile band':'deck / coping');draw();state('Tap around the '+t+' area, then press Done.','warn')}
 $('#editLayer').onpointerdown=e=>{const r=e.currentTarget.getBoundingClientRect();pts.push([((e.clientX-r.left)/r.width*100),((e.clientY-r.top)/r.height*100)]);draw()}
 $('#undo').onclick=()=>{pts.pop();draw()};$('#clear').onclick=()=>{pts=[];draw()};$('#cancel').onclick=()=>{queue=[];edit=null;pts=[];draw();hero.classList.remove('editing');$('#editBar').classList.remove('active');state('Area editing cancelled.','warn')}
-$('#done').onclick=()=>{if(pts.length<3)return state('Add at least 3 points.','warn');masks[edit]=pts.map(p=>p.slice());masksApply();const was=edit;edit=null;pts=[];draw();hero.classList.remove('editing');$('#editBar').classList.remove('active');if(was==='pool')finishOv.style.opacity=$('#fo').value/100;if(was==='tile')tileOv.style.opacity=$('#to').value/100;if(was==='deck')deckOv.style.opacity=$('#do').value/100;state('Area saved.','ok');if(queue.length)setTimeout(()=>startEdit(queue.shift()),100)}
+$('#done').onclick=()=>{if(pts.length<3)return state('Add at least 3 points.','warn');masks[edit]=pts.map(p=>p.slice());masksApply();const was=edit;edit=null;pts=[];draw();hero.classList.remove('editing');$('#editBar').classList.remove('active');if(was==='pool')finishOv.style.opacity=$('#fo').value/100;if(was==='tile')tileOv.style.opacity=$('#to').value/100;if(was==='deck')deckOv.style.opacity=$('#do').value/100;state('Area saved.','ok');if(queue.length)startEdit(queue.shift())}
 function bind(id,el,kind,sfx){const x=$('#'+id),o=x.parentElement.querySelector('output');const go=()=>{if(kind==='o')el.style.opacity=x.value/100;else el.style.backgroundSize=x.value+'px '+x.value+'px';o.textContent=x.value+sfx};x.oninput=go;go()}
 function applyRanges(){bind('fo',finishOv,'o','%');bind('to',tileOv,'o','%');bind('ts',tileOv,'s','px');bind('do',deckOv,'o','%');bind('ds',deckOv,'s','px')}
 $('#addCustom').onclick=()=>{const n=$('#customName').value.trim();if(!n)return state('Type a finish name first.','warn');F.push([n,'Custom',$('#customColor').value]);sel.f=F.length-1;update();state(n+' added.','ok')}
